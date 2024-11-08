@@ -3,6 +3,14 @@
 ## Features
 ### When instance state == stopped
 - Starts corresponding instance with one button click.
+- Updates `Hostname` of corresponding `Host` in `~/.ssh/config`. This relieves hassles to check updated `Public IPv4 DNS` every time when we start an EC2 instance.
+    ```bash
+    # ~/.ssh/config
+    Host aws-ec2-96
+        Hostname ec2-xx-yyy-zz-www.compute-1.amazonaws.com
+        User ubuntu
+        IdentityFile /Users/username/.ssh/aws.pem
+    ```
 ### When instance state == running
 - Tracks estimated price from the starting time.
 - Tracks instance state.
