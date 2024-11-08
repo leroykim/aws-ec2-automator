@@ -46,4 +46,5 @@ SSH_HOST=aws-ec2-test
 
 ## TODO
 - [ ] Add environment setup information.
+- [ ] Separate main parts from gui codes.
 - [ ] Add screenshots.
