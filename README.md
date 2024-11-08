@@ -2,11 +2,10 @@
 
 ## Features
 ### When instance state == stopped
-- Start corresponding instance.
-- Wait until instance state becomes running.
-- Tracks estimated price from the starting time.
+- Starts corresponding instance with one button click.
 ### When instance state == running
 - Tracks estimated price from the starting time.
+- Tracks instance state.
 - Stops corresponding instance with one button click.
 
 ## How to run it
