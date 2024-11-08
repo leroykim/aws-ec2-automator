@@ -6,7 +6,7 @@
 - Updates `Hostname` of corresponding `Host` in `~/.ssh/config`. This relieves hassles to check updated `Public IPv4 DNS` every time when we start an EC2 instance.
     ```bash
     # ~/.ssh/config
-    Host aws-ec2-96
+    Host aws-ec2-test
         Hostname ec2-xx-yyy-zz-www.compute-1.amazonaws.com
         User ubuntu
         IdentityFile /Users/username/.ssh/aws.pem
