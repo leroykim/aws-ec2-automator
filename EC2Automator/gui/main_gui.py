@@ -189,7 +189,7 @@ class EC2AutomatorGUI:
                 # Instance is running
                 self.update_status(f"Instance {instance_id} is running.", "green")
                 messagebox.showinfo(
-                    "Instance Status", f"Instance {instance_id} is already running."
+                    "Instance Status", f"Instance {instance_id} is running."
                 )
             else:
                 # Instance was started successfully

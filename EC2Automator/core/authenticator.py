@@ -1,7 +1,14 @@
+# core/authenticator.py
+
 import boto3
 import subprocess
 import sys
-from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+from botocore.exceptions import (
+    ClientError,
+    NoCredentialsError,
+    PartialCredentialsError,
+    SSOTokenLoadError,
+)
 from .logger import logger
 
 
@@ -30,7 +37,12 @@ class SSOAuthenticator:
             sts_client.get_caller_identity()
             logger.info("AWS session is authenticated.")
             return True
-        except (NoCredentialsError, ClientError, PartialCredentialsError) as e:
+        except (
+            NoCredentialsError,
+            ClientError,
+            PartialCredentialsError,
+            SSOTokenLoadError,
+        ) as e:
             logger.warning(f"AWS session is not authenticated: {e}")
             return False
 

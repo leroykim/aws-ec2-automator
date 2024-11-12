@@ -22,7 +22,7 @@ class EC2Automator:
         ssh_config_path="~/.ssh/config",
     ):
         """
-        Initializes the EC2Automator with necessary configurations.
+        Initializes the EC2Automator with necessary configurations and authenticates the AWS session.
 
         :param aws_profile: str. AWS CLI profile name configured for SSO.
         :param region: str. AWS region where the EC2 instance is located.
@@ -36,17 +36,21 @@ class EC2Automator:
         self.ssh_host_name = ssh_host_name
         self.ssh_config_path = ssh_config_path
         self.ssh_manager = SSHConfigManager(self.ssh_config_path)
-        self.ec2_manager = EC2Manager(profile_name=self.aws_profile, region=self.region)
         self.authenticator = SSOAuthenticator(profile_name=self.aws_profile)
+        self.ec2_manager = EC2Manager(profile_name=self.aws_profile, region=self.region)
         self.cost_estimator = EC2CostEstimator(
             profile_name=self.aws_profile, region=self.region
         )
 
-    def start(self):
+        # Perform authentication upon initialization
+        self.authenticate()
+
+    def authenticate(self):
         """
-        Executes the workflow to authenticate, check instance state, start EC2, retrieve DNS, backup and update SSH config.
+        Authenticates the AWS session. Logs in if not already authenticated.
+
+        Exits the program if authentication fails.
         """
-        # Authentication
         if not self.authenticator.is_authenticated():
             logger.warning("AWS session is not authenticated or token has expired.")
             self.authenticator.login()
@@ -55,6 +59,12 @@ class EC2Automator:
                 sys.exit(1)
         else:
             logger.info("AWS session is already authenticated.")
+
+    def start(self):
+        """
+        Executes the workflow to check instance state, start EC2, retrieve DNS, backup and update SSH config.
+        """
+        # Authentication is already handled in __init__
 
         # Check if the instance is already running
         current_state = self.ec2_manager.get_instance_state(self.instance_id)
@@ -100,17 +110,9 @@ class EC2Automator:
 
     def stop(self):
         """
-        Executes the workflow to authenticate and stop the EC2 instance.
+        Executes the workflow to stop the EC2 instance.
         """
-        # Authentication
-        if not self.authenticator.is_authenticated():
-            logger.warning("AWS session is not authenticated or token has expired.")
-            self.authenticator.login()
-            if not self.authenticator.is_authenticated():
-                logger.error("Failed to authenticate AWS SSO. Exiting.")
-                sys.exit(1)
-        else:
-            logger.info("AWS session is already authenticated.")
+        # Authentication is already handled in __init__
 
         # Stop EC2 Instance
         if not self.ec2_manager.stop_instance(self.instance_id):
