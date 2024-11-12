@@ -116,3 +116,39 @@ class EC2Manager:
         except ClientError as e:
             logger.error(f"An error occurred while retrieving the instance state: {e}")
             return None
+
+    def get_instance_type(self, instance_id):
+        """
+        Retrieves the instance type of the specified EC2 instance.
+
+        :param instance_id: str. The ID of the EC2 instance.
+        :return: str or None. The instance type (e.g., 't2.micro'), or None if not found.
+        """
+        try:
+            logger.info(f"Fetching instance type for {instance_id}.")
+            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+            instance = response["Reservations"][0]["Instances"][0]
+            instance_type = instance["InstanceType"]
+            logger.info(f"Instance {instance_id} is of type: {instance_type}")
+            return instance_type
+        except ClientError as e:
+            logger.error(f"Error fetching instance type for {instance_id}: {e}")
+            return None
+
+    def get_launch_time(self, instance_id):
+        """
+        Retrieves the launch time of the specified EC2 instance.
+
+        :param instance_id: str. The ID of the EC2 instance.
+        :return: datetime or None. The launch time in UTC, or None if not found.
+        """
+        try:
+            logger.info(f"Fetching launch time for {instance_id}.")
+            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+            instance = response["Reservations"][0]["Instances"][0]
+            launch_time = instance["LaunchTime"]
+            logger.info(f"Instance {instance_id} launch time: {launch_time}")
+            return launch_time
+        except ClientError as e:
+            logger.error(f"Error fetching launch time for {instance_id}: {e}")
+            return None

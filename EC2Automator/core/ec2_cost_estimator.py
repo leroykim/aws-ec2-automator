@@ -1,9 +1,9 @@
-import boto3
+# core/ec2_cost_estimator.py
+
+import json
 from botocore.exceptions import ClientError
 from .logger import logger
 from datetime import datetime, timezone
-import math
-import json
 
 
 class EC2CostEstimator:
@@ -11,71 +11,32 @@ class EC2CostEstimator:
     Estimates the cost of running an EC2 instance based on its start time and instance type.
     """
 
-    def __init__(self, profile_name, region):
+    def __init__(self, ec2_manager):
         """
-        Initializes the EC2CostEstimator with the necessary AWS profile and region.
+        Initializes the EC2CostEstimator with the EC2Manager instance.
 
-        :param profile_name: str. The AWS CLI profile name.
-        :param region: str. AWS region where the instance is located.
+        :param ec2_manager: EC2Manager. An instance of EC2Manager to manage EC2 operations.
         """
-        self.session = boto3.Session(profile_name=profile_name, region_name=region)
-        self.ec2_client = self.session.client("ec2")
-        self.pricing_client = self.session.client(
+        self.ec2_manager = ec2_manager
+        self.pricing_client = self.ec2_manager.session.client(
             "pricing", region_name="us-east-1"
         )  # Pricing API is available in us-east-1
         self.cache = {}  # Cache to store pricing information to minimize API calls
         logger.info(
-            f"Initialized EC2CostEstimator for profile '{profile_name}' in region '{region}'."
+            f"Initialized EC2CostEstimator using EC2Manager for profile '{self.ec2_manager.session.profile_name}' in region '{self.ec2_manager.session.region_name}'."
         )
-
-    def get_instance_type(self, instance_id):
-        """
-        Retrieves the instance type of the specified EC2 instance.
-
-        :param instance_id: str. The ID of the EC2 instance.
-        :return: str or None. The instance type (e.g., 't2.micro'), or None if not found.
-        """
-        try:
-            logger.info(f"Fetching instance type for {instance_id}.")
-            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response["Reservations"][0]["Instances"][0]
-            instance_type = instance["InstanceType"]
-            logger.info(f"Instance {instance_id} is of type: {instance_type}")
-            return instance_type
-        except ClientError as e:
-            logger.error(f"Error fetching instance type for {instance_id}: {e}")
-            return None
-
-    def get_launch_time(self, instance_id):
-        """
-        Retrieves the launch time of the specified EC2 instance.
-
-        :param instance_id: str. The ID of the EC2 instance.
-        :return: datetime or None. The launch time in UTC, or None if not found.
-        """
-        try:
-            logger.info(f"Fetching launch time for {instance_id}.")
-            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response["Reservations"][0]["Instances"][0]
-            launch_time = instance["LaunchTime"]
-            logger.info(f"Instance {instance_id} launch time: {launch_time}")
-            return launch_time
-        except ClientError as e:
-            logger.error(f"Error fetching launch time for {instance_id}: {e}")
-            return None
 
     def calculate_running_hours(self, launch_time):
         """
         Calculates the running hours of the instance based on the launch time.
 
         :param launch_time: datetime. The UTC launch time of the instance.
-        :return: float. The elapsed time in hours, rounded up.
+        :return: float. The elapsed time in hours.
         """
         current_time = datetime.now(timezone.utc)
         elapsed_time = current_time - launch_time
-        # elapsed_hours = math.ceil(elapsed_time.total_seconds() / 3600)
         elapsed_hours = elapsed_time.total_seconds() / 3600
-        logger.info(f"Instance has been running for {elapsed_hours} hours.")
+        logger.info(f"Instance has been running for {elapsed_hours:.2f} hours.")
         return elapsed_hours
 
     def get_hourly_rate(self, instance_type):
@@ -156,13 +117,22 @@ class EC2CostEstimator:
         """
         try:
             logger.info(f"Estimating cost for instance {instance_id}.")
-            # Get instance type and launch time
-            instance_type = self.get_instance_type(instance_id)
+
+            # Get instance state using EC2Manager
+            state = self.ec2_manager.get_instance_state(instance_id)
+            if state != "running":
+                logger.info(
+                    f"Instance {instance_id} is not running (state: {state}). Estimated cost: $0.00"
+                )
+                return 0.0
+
+            # Get instance type and launch time using EC2Manager
+            instance_type = self.ec2_manager.get_instance_type(instance_id)
             if not instance_type:
                 logger.error("Cannot estimate cost without instance type.")
                 return None
 
-            launch_time = self.get_launch_time(instance_id)
+            launch_time = self.ec2_manager.get_launch_time(instance_id)
             if not launch_time:
                 logger.error("Cannot estimate cost without launch time.")
                 return None

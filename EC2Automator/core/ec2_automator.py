@@ -4,7 +4,7 @@ import sys
 from .authenticator import SSOAuthenticator
 from .ec2_manager import EC2Manager
 from .ssh_config_manager import SSHConfigManager
-from .cost_estimator import EC2CostEstimator
+from .ec2_cost_estimator import EC2CostEstimator
 from .logger import logger
 
 
@@ -38,9 +38,7 @@ class EC2Automator:
         self.ssh_manager = SSHConfigManager(self.ssh_config_path)
         self.authenticator = SSOAuthenticator(profile_name=self.aws_profile)
         self.ec2_manager = EC2Manager(profile_name=self.aws_profile, region=self.region)
-        self.cost_estimator = EC2CostEstimator(
-            profile_name=self.aws_profile, region=self.region
-        )
+        self.cost_estimator = EC2CostEstimator(ec2_manager=self.ec2_manager)
 
         # Perform authentication upon initialization
         self.authenticate()
