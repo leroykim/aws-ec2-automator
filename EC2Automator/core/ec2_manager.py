@@ -1,6 +1,14 @@
+# core/ec2_manager.py
+
 import boto3
 from botocore.exceptions import ClientError
 from .logger import logger
+
+
+class EC2ManagerError(Exception):
+    """Custom exception for EC2Manager-related errors."""
+
+    pass
 
 
 class EC2Manager:
@@ -8,147 +16,135 @@ class EC2Manager:
     Manages EC2 instance operations.
     """
 
-    def __init__(self, profile_name, region):
+    def __init__(self, session=None):
         """
-        Initializes the EC2Manager with a specific AWS CLI profile and region.
+        Initializes the EC2Manager with a boto3 session.
 
-        :param profile_name: str. The AWS CLI profile name.
-        :param region: str. AWS region where the instance is located.
+        :param session: boto3.Session or None. If None, a new session is created.
         """
-        self.profile_name = profile_name
-        self.region = region
-        self.session = boto3.Session(
-            profile_name=self.profile_name, region_name=self.region
-        )
+        self.session = session or boto3.Session()
         self.ec2_client = self.session.client("ec2")
+        logger.info(
+            f"Initialized EC2Manager for profile '{self.session.profile_name}' in region '{self.session.region_name}'."
+        )
 
-    def start_instance(self, instance_id):
+    def describe_instance(self, instance_id):
         """
-        Starts an EC2 instance and waits until it's running.
-
-        :param instance_id: str. The ID of the EC2 instance to start.
-        :return: bool. True if successful, False otherwise.
-        """
-        try:
-            logger.info(f"Starting instance {instance_id}...")
-            response = self.ec2_client.start_instances(InstanceIds=[instance_id])
-            logger.info(f"Start request response: {response}")
-
-            # Create a waiter to wait until the instance is running
-            waiter = self.ec2_client.get_waiter("instance_running")
-            logger.info(
-                f"Waiting for instance {instance_id} to reach 'running' state..."
-            )
-            waiter.wait(InstanceIds=[instance_id])
-            logger.info(f"Instance {instance_id} is now running.")
-            return True
-
-        except ClientError as e:
-            logger.error(f"An error occurred while starting the instance: {e}")
-            return False
-
-    def stop_instance(self, instance_id):
-        """
-        Stops an EC2 instance and waits until it's stopped.
-
-        :param instance_id: str. The ID of the EC2 instance to stop.
-        :return: bool. True if successful, False otherwise.
-        """
-        try:
-            logger.info(f"Stopping instance {instance_id}...")
-            response = self.ec2_client.stop_instances(InstanceIds=[instance_id])
-            logger.info(f"Stop request response: {response}")
-
-            # Create a waiter to wait until the instance is stopped
-            waiter = self.ec2_client.get_waiter("instance_stopped")
-            logger.info(
-                f"Waiting for instance {instance_id} to reach 'stopped' state..."
-            )
-            waiter.wait(InstanceIds=[instance_id])
-            logger.info(f"Instance {instance_id} is now stopped.")
-            return True
-
-        except ClientError as e:
-            logger.error(f"An error occurred while stopping the instance: {e}")
-            return False
-
-    def get_public_dns(self, instance_id):
-        """
-        Retrieves the Public IPv4 DNS of an EC2 instance.
+        Retrieves the full description of the specified EC2 instance.
 
         :param instance_id: str. The ID of the EC2 instance.
-        :return: str or None. The Public IPv4 DNS of the instance.
+        :return: dict. The instance description.
+        :raises EC2ManagerError: If the instance cannot be described.
         """
         try:
+            logger.debug(f"Describing instance {instance_id}.")
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
             instance = response["Reservations"][0]["Instances"][0]
-            public_dns = instance.get("PublicDnsName")
-
-            if public_dns:
-                logger.info(
-                    f"The Public IPv4 DNS for instance {instance_id} is: {public_dns}"
-                )
-                return public_dns
-            else:
-                logger.warning(
-                    f"Instance {instance_id} does not have a Public IPv4 DNS."
-                )
-                return None
-
+            return instance
         except ClientError as e:
-            logger.error(f"An error occurred while retrieving the Public DNS: {e}")
-            return None
+            logger.error(f"Error describing instance {instance_id}: {e}")
+            raise EC2ManagerError(f"Error describing instance {instance_id}") from e
 
     def get_instance_state(self, instance_id):
         """
-        Retrieves the current state of an EC2 instance.
+        Retrieves the current state of the specified EC2 instance.
 
         :param instance_id: str. The ID of the EC2 instance.
-        :return: str or None. The current state of the instance (e.g., 'running', 'stopped'), or None if not found.
+        :return: str. The state of the instance (e.g., 'running', 'stopped').
+        :raises EC2ManagerError: If the state cannot be retrieved.
         """
         try:
-            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response["Reservations"][0]["Instances"][0]
+            instance = self.describe_instance(instance_id)
             state = instance["State"]["Name"]
-            logger.info(f"Instance {instance_id} is currently in state: {state}")
+            logger.debug(f"Instance {instance_id} is in state: {state}")
             return state
-
-        except ClientError as e:
-            logger.error(f"An error occurred while retrieving the instance state: {e}")
-            return None
+        except EC2ManagerError as e:
+            logger.error(f"Failed to get state for instance {instance_id}: {e}")
+            raise
 
     def get_instance_type(self, instance_id):
         """
         Retrieves the instance type of the specified EC2 instance.
 
         :param instance_id: str. The ID of the EC2 instance.
-        :return: str or None. The instance type (e.g., 't2.micro'), or None if not found.
+        :return: str. The instance type (e.g., 't2.micro').
+        :raises EC2ManagerError: If the instance type cannot be retrieved.
         """
         try:
-            logger.info(f"Fetching instance type for {instance_id}.")
-            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response["Reservations"][0]["Instances"][0]
+            instance = self.describe_instance(instance_id)
             instance_type = instance["InstanceType"]
-            logger.info(f"Instance {instance_id} is of type: {instance_type}")
+            logger.debug(f"Instance {instance_id} is of type: {instance_type}")
             return instance_type
-        except ClientError as e:
-            logger.error(f"Error fetching instance type for {instance_id}: {e}")
-            return None
+        except EC2ManagerError as e:
+            logger.error(f"Failed to get instance type for {instance_id}: {e}")
+            raise
 
     def get_launch_time(self, instance_id):
         """
         Retrieves the launch time of the specified EC2 instance.
 
         :param instance_id: str. The ID of the EC2 instance.
-        :return: datetime or None. The launch time in UTC, or None if not found.
+        :return: datetime. The launch time in UTC.
+        :raises EC2ManagerError: If the launch time cannot be retrieved.
         """
         try:
-            logger.info(f"Fetching launch time for {instance_id}.")
-            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response["Reservations"][0]["Instances"][0]
+            instance = self.describe_instance(instance_id)
             launch_time = instance["LaunchTime"]
-            logger.info(f"Instance {instance_id} launch time: {launch_time}")
+            logger.debug(f"Instance {instance_id} launch time: {launch_time}")
             return launch_time
+        except EC2ManagerError as e:
+            logger.error(f"Failed to get launch time for {instance_id}: {e}")
+            raise
+
+    def start_instance(self, instance_id):
+        """
+        Starts the specified EC2 instance.
+
+        :param instance_id: str. The ID of the EC2 instance.
+        :return: bool. True if started successfully, False otherwise.
+        """
+        try:
+            logger.info(f"Starting instance {instance_id}.")
+            self.ec2_client.start_instances(InstanceIds=[instance_id])
+            logger.info(f"Instance {instance_id} start initiated.")
+            return True
         except ClientError as e:
-            logger.error(f"Error fetching launch time for {instance_id}: {e}")
-            return None
+            logger.error(f"Error starting instance {instance_id}: {e}")
+            return False
+
+    def stop_instance(self, instance_id):
+        """
+        Stops the specified EC2 instance.
+
+        :param instance_id: str. The ID of the EC2 instance.
+        :return: bool. True if stopped successfully, False otherwise.
+        """
+        try:
+            logger.info(f"Stopping instance {instance_id}.")
+            self.ec2_client.stop_instances(InstanceIds=[instance_id])
+            logger.info(f"Instance {instance_id} stop initiated.")
+            return True
+        except ClientError as e:
+            logger.error(f"Error stopping instance {instance_id}: {e}")
+            return False
+
+    def get_public_dns(self, instance_id):
+        """
+        Retrieves the public DNS of the specified EC2 instance.
+
+        :param instance_id: str. The ID of the EC2 instance.
+        :return: str. The public DNS name.
+        :raises EC2ManagerError: If the public DNS cannot be retrieved.
+        """
+        try:
+            instance = self.describe_instance(instance_id)
+            public_dns = instance.get("PublicDnsName", "")
+            if public_dns:
+                logger.debug(f"Instance {instance_id} public DNS: {public_dns}")
+                return public_dns
+            else:
+                logger.warning(f"Instance {instance_id} does not have a public DNS.")
+                return ""
+        except EC2ManagerError as e:
+            logger.error(f"Failed to get public DNS for {instance_id}: {e}")
+            raise
