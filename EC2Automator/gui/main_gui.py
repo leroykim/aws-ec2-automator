@@ -6,7 +6,6 @@ import threading
 import os
 import sys
 from dotenv import load_dotenv
-import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -16,7 +15,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-# Updated imports based on refactored core classes
+# Import core classes
 from core.sso_authentication_checker import (
     SSOAuthenticationChecker,
     AuthenticationError,
@@ -33,6 +32,8 @@ class EC2AutomatorGUI:
     def __init__(self, master):
         self.master = master
         master.title("EC2 Automator")
+        master.geometry("500x350")
+        master.resizable(False, False)
 
         # Create input fields
         self.create_input_fields()
@@ -51,10 +52,14 @@ class EC2AutomatorGUI:
         self.cost_label.pack(pady=5)
 
         # Initialize EC2Automator
+        self.ec2_automator = None
         self.initialize_ec2_automator()
 
         # Start cost estimation updates
         self.update_cost_estimation()
+
+        # Start monitoring instance state
+        self.monitor_instance_state()
 
     def create_input_fields(self):
         frame = ttk.Frame(self.master, padding="10")
@@ -112,6 +117,7 @@ class EC2AutomatorGUI:
             frame, text="Stop Instance", command=self.stop_instance
         )
         self.stop_button.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        self.stop_button.config(state=tk.DISABLED)  # Initially disabled
 
     def initialize_ec2_automator(self):
         """
@@ -196,7 +202,7 @@ class EC2AutomatorGUI:
 
             # Initialize dependencies (if EC2Automator wasn't initialized)
             if not hasattr(self, "ec2_automator"):
-                authentication_checker = SSOAuthenticationChecker(
+                sso_authentication_checker = SSOAuthenticationChecker(
                     profile_name=aws_profile
                 )
                 sso_login_handler = SSOLoginHandler(profile_name=aws_profile)
@@ -205,7 +211,7 @@ class EC2AutomatorGUI:
                 cost_estimator = EC2CostEstimator(ec2_manager=ec2_manager)
 
                 self.ec2_automator = EC2Automator(
-                    authentication_checker=authentication_checker,
+                    sso_authentication_checker=sso_authentication_checker,
                     sso_login_handler=sso_login_handler,
                     ec2_manager=ec2_manager,
                     ssh_manager=ssh_manager,
@@ -278,7 +284,7 @@ class EC2AutomatorGUI:
             # Initialize dependencies (if EC2Automator wasn't initialized)
             if not hasattr(self, "ec2_automator"):
                 ssh_host = self.ssh_host_entry.get().strip()
-                authentication_checker = SSOAuthenticationChecker(
+                sso_authentication_checker = SSOAuthenticationChecker(
                     profile_name=aws_profile
                 )
                 sso_login_handler = SSOLoginHandler(profile_name=aws_profile)
@@ -287,7 +293,7 @@ class EC2AutomatorGUI:
                 cost_estimator = EC2CostEstimator(ec2_manager=ec2_manager)
 
                 self.ec2_automator = EC2Automator(
-                    authentication_checker=authentication_checker,
+                    sso_authentication_checker=sso_authentication_checker,
                     sso_login_handler=sso_login_handler,
                     ec2_manager=ec2_manager,
                     ssh_manager=ssh_manager,
@@ -299,16 +305,37 @@ class EC2AutomatorGUI:
             # Stop the instance workflow
             self.ec2_automator.stop_instance_workflow()
 
-            self.update_status(f"Instance {instance_id} stopped successfully.", "green")
-            messagebox.showinfo(
-                "Success", f"Instance {instance_id} stopped successfully."
-            )
-            logger.info(f"Stop Instance: Instance {instance_id} stopped successfully.")
-
             # After stopping, check the instance state to confirm
             current_state = self.ec2_automator.ec2_manager.get_instance_state(
                 instance_id
             )
+            if current_state == "stopping":
+                # Instance is in the process of stopping
+                self.update_status(f"Instance {instance_id} is stopping...", "orange")
+                messagebox.showinfo(
+                    "Info",
+                    f"Instance {instance_id} is stopping. Current state: {current_state}.",
+                )
+            elif current_state == "stopped":
+                self.update_status(
+                    f"Instance {instance_id} stopped successfully.", "green"
+                )
+                messagebox.showinfo(
+                    "Success", f"Instance {instance_id} stopped successfully."
+                )
+            else:
+                # Instance is in an unexpected state
+                self.update_status(
+                    f"Instance {instance_id} is in state: {current_state}.", "orange"
+                )
+                messagebox.showinfo(
+                    "Info",
+                    f"Instance {instance_id} is in state: {current_state}.",
+                )
+
+            logger.info(f"Stop Instance: Instance {instance_id} state: {current_state}")
+
+            # Update button states based on the new instance state
             self.master.after(0, lambda: self.update_button_states(current_state))
 
         except EC2AutomatorError as e:
@@ -322,6 +349,12 @@ class EC2AutomatorGUI:
             logger.exception("Exception occurred while stopping instance.")
 
     def update_status(self, message, color):
+        """
+        Updates the status label with the given message and color.
+
+        :param message: str. The status message to display.
+        :param color: str. The color of the text.
+        """
         self.status_label.config(text=f"Status: {message}", foreground=color)
 
     def update_cost_estimation(self):
@@ -357,6 +390,26 @@ class EC2AutomatorGUI:
             600000, self.update_cost_estimation
         )  # Update every 600 seconds
 
+    def monitor_instance_state(self):
+        """
+        Periodically checks the EC2 instance state and updates button states.
+        """
+        try:
+            if self.ec2_automator:
+                current_state = self.ec2_automator.ec2_manager.get_instance_state(
+                    self.ec2_automator.instance_id
+                )
+                self.update_button_states(current_state)
+        except EC2AutomatorError as e:
+            logger.error(f"Error monitoring instance state: {e}")
+            self.update_status(f"Error monitoring instance state: {e}", "red")
+        except Exception as e:
+            logger.exception(f"Unexpected error while monitoring instance state: {e}")
+            self.update_status(f"Error monitoring instance state: {e}", "red")
+
+        # Schedule the next state check in 60,000 milliseconds (60 seconds)
+        self.master.after(60000, self.monitor_instance_state)
+
     def update_button_states(self, state):
         """
         Enables or disables buttons based on the instance state.
@@ -371,11 +424,27 @@ class EC2AutomatorGUI:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
             self.update_status("Instance is stopped.", "blue")
-        else:
-            # For states like 'pending', 'stopping', etc.
+        elif state == "stopping":
             self.start_button.config(state=tk.DISABLED)
             self.stop_button.config(state=tk.DISABLED)
-            self.update_status(f"Instance is {state}.", "orange")
+            self.update_status("Instance is stopping...", "orange")
+        elif state == "pending":
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.DISABLED)
+            self.update_status("Instance is pending...", "orange")
+        elif state == "shutting-down":
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.DISABLED)
+            self.update_status("Instance is shutting down...", "orange")
+        elif state == "terminated":
+            self.start_button.config(state=tk.NORMAL)
+            self.stop_button.config(state=tk.DISABLED)
+            self.update_status("Instance has been terminated.", "red")
+        else:
+            # For any other unexpected states
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.DISABLED)
+            self.update_status(f"Instance is in '{state}' state.", "orange")
 
 
 class EC2AutomatorError(Exception):
