@@ -8,21 +8,50 @@ import tempfile
 
 
 class SSHConfigManagerError(Exception):
-    """Custom exception for SSHConfigManager-related errors."""
+    """
+    Custom exception for SSHConfigManager-related errors.
 
-    pass
+    Attributes
+    ----------
+    message : str
+        Explanation of the error.
+    """
+
+    def __init__(self, message):
+        """
+        Initialize the SSHConfigManagerError with a message.
+
+        Parameters
+        ----------
+        message : str
+            Explanation of the error.
+        """
+        super().__init__(message)
+        self.message = message
 
 
 class SSHConfigManager:
     """
     Manages SSH configuration file operations without external parsing libraries.
+
+    This class provides functionalities to load, backup, and update SSH configuration
+    files. It ensures that SSH host entries can be added or modified seamlessly,
+    facilitating easy SSH access to EC2 instances.
     """
 
     def __init__(self, ssh_config_path="~/.ssh/config"):
         """
-        Initializes the SSHConfigManager with the path to the SSH config file.
+        Initialize the SSHConfigManager with the path to the SSH config file.
 
-        :param ssh_config_path: str. Path to the SSH config file.
+        Parameters
+        ----------
+        ssh_config_path : str, optional
+            Path to the SSH config file. Defaults to "~/.ssh/config".
+
+        Raises
+        ------
+        SSHConfigManagerError
+            If there is an error loading the SSH config file.
         """
         self.ssh_config_path = Path(ssh_config_path).expanduser()
         self.config_lines = []
@@ -30,10 +59,15 @@ class SSHConfigManager:
 
     def _load_config(self):
         """
-        Loads the SSH config file into memory.
+        Load the SSH config file into memory.
 
-        Raises:
-            SSHConfigManagerError: If the SSH config file cannot be read.
+        This method reads the SSH configuration file and stores its contents
+        in the `config_lines` attribute for manipulation.
+
+        Raises
+        ------
+        SSHConfigManagerError
+            If the SSH config file cannot be read due to I/O errors.
         """
         try:
             if not self.ssh_config_path.exists():
@@ -52,10 +86,20 @@ class SSHConfigManager:
 
     def backup_config(self):
         """
-        Creates a backup of the SSH config file.
+        Create a backup of the SSH config file.
 
-        :return: Path. Path to the backup file.
-        :raises SSHConfigManagerError: If the backup process fails.
+        This method copies the existing SSH config file to a backup file with a `.backup` suffix
+        and sets its permissions to be readable and writable only by the user.
+
+        Returns
+        -------
+        Path
+            Path to the backup SSH config file.
+
+        Raises
+        ------
+        SSHConfigManagerError
+            If the backup process fails due to I/O errors.
         """
         backup_path = self.ssh_config_path.with_suffix(".backup")
         try:
@@ -69,12 +113,22 @@ class SSHConfigManager:
 
     def update_host(self, host_name, new_dns):
         """
-        Updates the Hostname for a specified Host in the SSH config file.
-        If the Host does not exist, it adds a new Host block.
+        Update the Hostname for a specified Host in the SSH config file.
 
-        :param host_name: str. The Host entry in the SSH config to update.
-        :param new_dns: str. The new Public IPv4 DNS to set as Hostname.
-        :raises SSHConfigManagerError: If the update process fails.
+        If the specified Host does not exist, this method adds a new Host block with the provided
+        Hostname.
+
+        Parameters
+        ----------
+        host_name : str
+            The Host entry in the SSH config to update.
+        new_dns : str
+            The new Public IPv4 DNS to set as Hostname.
+
+        Raises
+        ------
+        SSHConfigManagerError
+            If the update process fails due to I/O errors or unexpected issues.
         """
         try:
             updated = False

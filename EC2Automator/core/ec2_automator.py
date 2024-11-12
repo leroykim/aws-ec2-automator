@@ -10,14 +10,70 @@ from .logger import logger
 
 
 class EC2AutomatorError(Exception):
-    """Custom exception for EC2Automator-related errors."""
+    """
+    Custom exception for EC2Automator-related errors.
 
-    pass
+    Attributes
+    ----------
+    message : str
+        Explanation of the error.
+    """
+
+    def __init__(self, message):
+        """
+        Initialize the EC2AutomatorError with a message.
+
+        Parameters
+        ----------
+        message : str
+            Explanation of the error.
+        """
+        super().__init__(message)
+        self.message = message
 
 
 class EC2Automator:
     """
     Integrates EC2 operations with SSH config management and cost estimation.
+
+    This class orchestrates the workflow for managing an EC2 instance, including starting,
+    stopping, updating SSH configurations, and estimating running costs. It ensures that
+    the AWS session is authenticated, handles the state transitions of the EC2 instance,
+    and maintains the SSH configuration for seamless access.
+
+    Parameters
+    ----------
+    sso_authentication_checker : SSOAuthenticationChecker
+        Instance to check AWS authentication status.
+    sso_login_handler : SSOLoginHandler
+        Instance to handle AWS SSO login process.
+    ec2_manager : EC2Manager
+        Instance to manage EC2 operations like start, stop, and state retrieval.
+    ssh_manager : SSHConfigManager
+        Instance to manage SSH configuration entries.
+    cost_estimator : EC2CostEstimator
+        Instance to estimate the running cost of the EC2 instance.
+    instance_id : str
+        The ID of the EC2 instance to manage.
+    ssh_host_name : str
+        The Host entry name in the SSH config to update for SSH access.
+
+    Attributes
+    ----------
+    authentication_checker : SSOAuthenticationChecker
+        Checker for AWS authentication.
+    sso_login_handler : SSOLoginHandler
+        Handler for AWS SSO login.
+    ec2_manager : EC2Manager
+        Manager for EC2 operations.
+    ssh_manager : SSHConfigManager
+        Manager for SSH configurations.
+    cost_estimator : EC2CostEstimator
+        Estimator for EC2 running costs.
+    instance_id : str
+        EC2 instance ID.
+    ssh_host_name : str
+        SSH Host entry name.
     """
 
     def __init__(
@@ -31,15 +87,24 @@ class EC2Automator:
         ssh_host_name: str,
     ):
         """
-        Initializes the EC2Automator with necessary configurations and dependencies.
+        Initialize the EC2Automator with necessary configurations and dependencies.
 
-        :param sso_authentication_checker: SSOAuthenticationChecker. Checks AWS authentication.
-        :param sso_login_handler: SSOLoginHandler. Manages AWS SSO login.
-        :param ec2_manager: EC2Manager. Manages EC2 operations.
-        :param ssh_manager: SSHConfigManager. Manages SSH configuration.
-        :param cost_estimator: EC2CostEstimator. Estimates EC2 running costs.
-        :param instance_id: str. The ID of the EC2 instance to manage.
-        :param ssh_host_name: str. The Host entry in the SSH config to update.
+        Parameters
+        ----------
+        sso_authentication_checker : SSOAuthenticationChecker
+            Checker for AWS authentication.
+        sso_login_handler : SSOLoginHandler
+            Handler for AWS SSO login.
+        ec2_manager : EC2Manager
+            Manager for EC2 operations.
+        ssh_manager : SSHConfigManager
+            Manager for SSH configurations.
+        cost_estimator : EC2CostEstimator
+            Estimator for EC2 running costs.
+        instance_id : str
+            The ID of the EC2 instance to manage.
+        ssh_host_name : str
+            The Host entry name in the SSH config to update for SSH access.
         """
         self.authentication_checker = sso_authentication_checker
         self.sso_login_handler = sso_login_handler
@@ -54,10 +119,17 @@ class EC2Automator:
 
     def authenticate(self):
         """
-        Authenticates the AWS session. Attempts login if not authenticated.
+        Authenticate the AWS session. Attempts login if not authenticated.
 
-        Raises:
-            EC2AutomatorError: If authentication fails.
+        This method checks if the AWS session is authenticated using the provided
+        SSOAuthenticationChecker. If not authenticated, it initiates the SSO
+        login process using the SSOLoginHandler. It ensures that the session is
+        authenticated before proceeding with EC2 operations.
+
+        Raises
+        ------
+        EC2AutomatorError
+            If authentication fails after attempting SSO login.
         """
         if not self.authentication_checker.is_authenticated():
             logger.warning("AWS session is not authenticated or token has expired.")
@@ -75,15 +147,21 @@ class EC2Automator:
 
     def start_instance_workflow(self):
         """
-        Executes the workflow to start an EC2 instance:
-        - Checks instance state.
-        - Starts the instance if not running.
-        - Waits until the instance is running.
-        - Retrieves public DNS.
-        - Backs up and updates SSH config.
+        Execute the workflow to start an EC2 instance.
 
-        Raises:
-            EC2AutomatorError: If any step in the workflow fails.
+        This method performs the following steps:
+        1. Checks the current state of the EC2 instance.
+        2. If the instance is not running, initiates the start operation.
+        3. Waits until the instance reaches the 'running' state.
+        4. Retrieves the public DNS of the instance.
+        5. Backs up the existing SSH configuration.
+        6. Updates the SSH configuration with the new host entry.
+
+        Raises
+        ------
+        EC2AutomatorError
+            If any step in the workflow fails, including state retrieval,
+            instance start operation, waiter failures, or SSH configuration updates.
         """
         # Check if the instance is already running
         try:
@@ -171,13 +249,19 @@ class EC2Automator:
 
     def stop_instance_workflow(self):
         """
-        Executes the workflow to stop an EC2 instance:
-        - Checks instance state.
-        - Stops the instance if running.
-        - Waits until the instance is stopped.
+        Execute the workflow to stop an EC2 instance.
 
-        Raises:
-            EC2AutomatorError: If any step in the workflow fails.
+        This method performs the following steps:
+        1. Checks the current state of the EC2 instance.
+        2. If the instance is running, initiates the stop operation.
+        3. Waits until the instance reaches the 'stopped' state.
+        4. Removes the SSH host entry from the SSH configuration.
+
+        Raises
+        ------
+        EC2AutomatorError
+            If any step in the workflow fails, including state retrieval,
+            instance stop operation, or SSH configuration updates.
         """
         # Check if the instance is already stopped
         try:
@@ -235,10 +319,20 @@ class EC2Automator:
 
     def get_estimated_cost(self):
         """
-        Retrieves the estimated cost of the running EC2 instance.
+        Retrieve the estimated cost of the running EC2 instance.
 
-        :return: float. The estimated cost in USD.
-        :raises EC2AutomatorError: If cost estimation fails.
+        This method delegates the cost estimation to the EC2CostEstimator and returns
+        the estimated hourly cost of running the specified EC2 instance.
+
+        Returns
+        -------
+        float
+            The estimated hourly cost in USD.
+
+        Raises
+        ------
+        EC2AutomatorError
+            If cost estimation fails.
         """
         try:
             cost = self.cost_estimator.estimate_cost(self.instance_id)

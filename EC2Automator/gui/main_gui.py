@@ -29,7 +29,24 @@ from core.logger import logger
 
 
 class EC2AutomatorGUI:
+    """
+    A graphical user interface (GUI) for managing AWS EC2 instances.
+
+    This class provides functionalities to start and stop EC2 instances,
+    monitor their statuses, manage SSH configurations, and estimate running costs.
+    The GUI is built using Tkinter and ensures a responsive user experience by
+    leveraging threading for long-running operations.
+    """
+
     def __init__(self, master):
+        """
+        Initialize the EC2AutomatorGUI.
+
+        Parameters
+        ----------
+        master : tkinter.Tk
+            The root window of the Tkinter application.
+        """
         self.master = master
         master.title("EC2 Automator")
         master.geometry("500x350")
@@ -62,6 +79,9 @@ class EC2AutomatorGUI:
         self.monitor_instance_state()
 
     def create_input_fields(self):
+        """
+        Create and layout the input fields for AWS Profile, Region, EC2 Instance ID, and SSH Host Name.
+        """
         frame = ttk.Frame(self.master, padding="10")
         frame.pack(fill=tk.X)
 
@@ -105,6 +125,9 @@ class EC2AutomatorGUI:
         frame.columnconfigure(1, weight=1)
 
     def create_buttons(self):
+        """
+        Create and layout the Start and Stop Instance buttons.
+        """
         frame = ttk.Frame(self.master, padding="10")
         frame.pack(fill=tk.X)
 
@@ -121,7 +144,12 @@ class EC2AutomatorGUI:
 
     def initialize_ec2_automator(self):
         """
-        Initializes the EC2Automator instance based on user input.
+        Initialize the EC2Automator instance based on user input.
+
+        Raises
+        ------
+        EC2AutomatorError
+            If there is an error during the initialization of EC2Automator.
         """
         try:
             aws_profile = self.aws_profile_entry.get().strip()
@@ -183,9 +211,26 @@ class EC2AutomatorGUI:
             messagebox.showerror("Unexpected Error", f"Error: {e}")
 
     def start_instance(self):
+        """
+        Start the EC2 instance in a separate thread to keep the GUI responsive.
+        """
         threading.Thread(target=self._start_instance_thread, daemon=True).start()
 
     def _start_instance_thread(self):
+        """
+        Thread target function to handle the start instance workflow.
+
+        This function performs the following steps:
+        1. Validates user input.
+        2. Initializes EC2Automator if not already initialized.
+        3. Initiates the start instance workflow.
+        4. Updates the GUI based on the instance's new state.
+
+        Raises
+        ------
+        EC2AutomatorError
+            If there is an error during the start instance workflow.
+        """
         self.update_status("Starting instance...", "blue")
         try:
             aws_profile = self.aws_profile_entry.get().strip()
@@ -201,7 +246,7 @@ class EC2AutomatorGUI:
                 return
 
             # Initialize dependencies (if EC2Automator wasn't initialized)
-            if not hasattr(self, "ec2_automator"):
+            if not hasattr(self, "ec2_automator") or self.ec2_automator is None:
                 sso_authentication_checker = SSOAuthenticationChecker(
                     profile_name=aws_profile
                 )
@@ -262,9 +307,26 @@ class EC2AutomatorGUI:
             logger.exception("Exception occurred while starting instance.")
 
     def stop_instance(self):
+        """
+        Stop the EC2 instance in a separate thread to keep the GUI responsive.
+        """
         threading.Thread(target=self._stop_instance_thread, daemon=True).start()
 
     def _stop_instance_thread(self):
+        """
+        Thread target function to handle the stop instance workflow.
+
+        This function performs the following steps:
+        1. Validates user input.
+        2. Initializes EC2Automator if not already initialized.
+        3. Initiates the stop instance workflow.
+        4. Updates the GUI based on the instance's new state.
+
+        Raises
+        ------
+        EC2AutomatorError
+            If there is an error during the stop instance workflow.
+        """
         self.update_status("Stopping instance...", "blue")
         try:
             aws_profile = self.aws_profile_entry.get().strip()
@@ -282,7 +344,7 @@ class EC2AutomatorGUI:
                 return
 
             # Initialize dependencies (if EC2Automator wasn't initialized)
-            if not hasattr(self, "ec2_automator"):
+            if not hasattr(self, "ec2_automator") or self.ec2_automator is None:
                 ssh_host = self.ssh_host_entry.get().strip()
                 sso_authentication_checker = SSOAuthenticationChecker(
                     profile_name=aws_profile
@@ -350,17 +412,22 @@ class EC2AutomatorGUI:
 
     def update_status(self, message, color):
         """
-        Updates the status label with the given message and color.
+        Update the status label with the given message and color.
 
-        :param message: str. The status message to display.
-        :param color: str. The color of the text.
+        Parameters
+        ----------
+        message : str
+            The status message to display.
+        color : str
+            The color of the status message text.
         """
         self.status_label.config(text=f"Status: {message}", foreground=color)
 
     def update_cost_estimation(self):
         """
-        Fetches and updates the estimated cost of the running instance.
-        This function schedules itself to run every 600 seconds (10 minutes).
+        Fetch and update the estimated cost of running the EC2 instance.
+
+        This function schedules itself to run every 600,000 milliseconds (10 minutes).
         """
         try:
             if hasattr(self, "ec2_automator") and self.ec2_automator:
@@ -392,7 +459,9 @@ class EC2AutomatorGUI:
 
     def monitor_instance_state(self):
         """
-        Periodically checks the EC2 instance state and updates button states.
+        Periodically check the EC2 instance state and update button states accordingly.
+
+        This function schedules itself to run every 60,000 milliseconds (60 seconds).
         """
         try:
             if self.ec2_automator:
@@ -412,9 +481,13 @@ class EC2AutomatorGUI:
 
     def update_button_states(self, state):
         """
-        Enables or disables buttons based on the instance state.
+        Enable or disable the Start and Stop Instance buttons based on the EC2 instance state.
 
-        :param state: str. The current state of the EC2 instance.
+        Parameters
+        ----------
+        state : str
+            The current state of the EC2 instance. Expected values include:
+            'running', 'stopped', 'stopping', 'pending', 'shutting-down', 'terminated'.
         """
         if state == "running":
             self.start_button.config(state=tk.DISABLED)
@@ -448,12 +521,17 @@ class EC2AutomatorGUI:
 
 
 class EC2AutomatorError(Exception):
-    """Custom exception for EC2Automator-related errors."""
+    """
+    Custom exception class for EC2Automator-related errors.
+    """
 
     pass
 
 
 def main():
+    """
+    The main entry point for the EC2 Automator application.
+    """
     root = tk.Tk()
     app = EC2AutomatorGUI(root)
     root.mainloop()

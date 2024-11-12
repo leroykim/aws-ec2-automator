@@ -7,27 +7,90 @@ from datetime import datetime, timezone
 
 
 class PricingError(Exception):
-    """Custom exception for pricing-related errors."""
+    """
+    Custom exception for pricing-related errors.
 
-    pass
+    Attributes
+    ----------
+    message : str
+        Explanation of the error.
+    """
+
+    def __init__(self, message):
+        """
+        Initialize the PricingError with a message.
+
+        Parameters
+        ----------
+        message : str
+            Explanation of the error.
+        """
+        super().__init__(message)
+        self.message = message
 
 
 class EC2CostEstimatorError(Exception):
-    """Custom exception for EC2CostEstimator-related errors."""
+    """
+    Custom exception for EC2CostEstimator-related errors.
 
-    pass
+    Attributes
+    ----------
+    message : str
+        Explanation of the error.
+    """
+
+    def __init__(self, message):
+        """
+        Initialize the EC2CostEstimatorError with a message.
+
+        Parameters
+        ----------
+        message : str
+            Explanation of the error.
+        """
+        super().__init__(message)
+        self.message = message
 
 
 class EC2CostEstimator:
     """
     Estimates the cost of running an EC2 instance based on its start time and instance type.
+
+    This class calculates the approximate hourly cost of running an EC2 instance by retrieving
+    its instance type and fetching the corresponding pricing information using the AWS Pricing API.
+
+    Parameters
+    ----------
+    ec2_manager : EC2Manager
+        Instance of EC2Manager to interact with EC2 services.
+
+    Attributes
+    ----------
+    ec2_manager : EC2Manager
+        The EC2Manager instance used for AWS EC2 interactions.
+    pricing_client : boto3.client
+        The AWS Pricing client for retrieving pricing information.
+    cache : dict
+        Cache to store pricing information to minimize API calls.
+
+    Methods
+    -------
+    calculate_running_hours(launch_time)
+        Calculates the running hours of the instance based on the launch time.
+    get_hourly_rate(instance_type)
+        Retrieves the current hourly rate for the specified instance type using the AWS Pricing API.
+    estimate_cost(instance_id)
+        Estimates the current cost of the running instance based on its type and launch time.
     """
 
     def __init__(self, ec2_manager):
         """
         Initializes the EC2CostEstimator with the EC2Manager instance.
 
-        :param ec2_manager: EC2Manager. Manages EC2 operations.
+        Parameters
+        ----------
+        ec2_manager : EC2Manager
+            Manages EC2 operations.
         """
         self.ec2_manager = ec2_manager
         self.pricing_client = self.ec2_manager.session.client(
@@ -42,8 +105,15 @@ class EC2CostEstimator:
         """
         Calculates the running hours of the instance based on the launch time.
 
-        :param launch_time: datetime. The UTC launch time of the instance.
-        :return: float. The elapsed time in hours.
+        Parameters
+        ----------
+        launch_time : datetime
+            The UTC launch time of the instance.
+
+        Returns
+        -------
+        float
+            The elapsed time in hours.
         """
         current_time = datetime.now(timezone.utc)
         elapsed_time = current_time - launch_time
@@ -57,9 +127,20 @@ class EC2CostEstimator:
         """
         Retrieves the current hourly rate for the specified instance type using the AWS Pricing API.
 
-        :param instance_type: str. The instance type (e.g., 't2.micro').
-        :return: float. The hourly rate in USD.
-        :raises PricingError: If pricing information cannot be retrieved.
+        Parameters
+        ----------
+        instance_type : str
+            The instance type (e.g., 't2.micro').
+
+        Returns
+        -------
+        float
+            The hourly rate in USD.
+
+        Raises
+        ------
+        PricingError
+            If pricing information cannot be retrieved.
         """
         # Check if the rate is already cached
         if instance_type in self.cache:
@@ -130,9 +211,20 @@ class EC2CostEstimator:
         """
         Estimates the current cost of the running instance based on its type and launch time.
 
-        :param instance_id: str. The ID of the EC2 instance.
-        :return: float. The estimated cost in USD.
-        :raises EC2CostEstimatorError: If estimation fails.
+        Parameters
+        ----------
+        instance_id : str
+            The ID of the EC2 instance.
+
+        Returns
+        -------
+        float
+            The estimated cost in USD.
+
+        Raises
+        ------
+        EC2CostEstimatorError
+            If estimation fails.
         """
         try:
             logger.info(f"Estimating cost for instance {instance_id}.")
