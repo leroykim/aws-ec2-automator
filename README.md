@@ -45,6 +45,6 @@ SSH_HOST=aws-ec2-test
 3. Run `python3 EC2Automator/gui/main_gui.py`
 
 ## TODO
-- [ ] Add environment setup information.
+- [x] Add installation script.
 - [ ] Separate main parts from gui codes.
 - [ ] Add screenshots.
